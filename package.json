@@ -1,0 +1,6 @@
+{
+  "name": "runtime-stream-checks",
+  "private": true,
+  "type": "module",
+  "dependencies": { "esbuild": "0.28.2" }
+}

@@ -1,0 +1,44 @@
+name: Checks
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: vercel/ai
+          ref: a089a0a8c7a5803d0bb0895145f3ede569af9a6b
+          path: upstream
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.4.0
+      - run: npm install --global pnpm@12.14.0
+      - run: pnpm install --frozen-lockfile
+        working-directory: upstream
+      - run: pnpm exec turbo build --filter=ai... --filter=@ai-sdk/provider-utils...
+        working-directory: upstream
+      - name: Provider regression suites
+        run: pnpm exec vitest run --config vitest.node.config.js --maxWorkers=1 src/read-response-with-size-limit.test.ts src/download-blob.test.ts src/response-handler.test.ts src/fetch-untrusted-url.test.ts src/fetch-with-validated-redirects.test.ts src/safe-node-fetch.node.test.ts src/safe-node-fetch.test.ts src/validate-download-url.test.ts
+        working-directory: upstream/packages/provider-utils
+      - name: Additional small boundary checks
+        run: |
+          cp fixtures/runtime-boundaries.test.ts upstream/packages/provider-utils/src/runtime-boundaries.test.ts
+          cd upstream/packages/provider-utils
+          pnpm exec vitest run --config vitest.node.config.js --maxWorkers=1 src/runtime-boundaries.test.ts
+      - name: Core regression suites
+        run: pnpm exec vitest run --config vitest.node.config.js --maxWorkers=1 src/util/download/download.test.ts src/util/download/download-function.test.ts src/prompt/convert-to-language-model-prompt.test.ts
+        working-directory: upstream/packages/ai
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: node ci/build.mjs upstream
+      - name: Bounded runtime samples
+        run: node ci/run-cases.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-results
+          path: results/
